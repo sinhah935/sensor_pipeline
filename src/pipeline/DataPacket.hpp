@@ -17,6 +17,7 @@ class DataPacket {
         float getDistance() const;
         float getTimeStamp() const;
         bool isValid() const;
+        void setDistance(float distance);
 
 };
 

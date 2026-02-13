@@ -3,11 +3,14 @@
 
 #include "Stage.hpp"
 
+static constexpr int HISTORY_SIZE = 5; //C++ way for defines
+//#define HISTORY_SIZE 5
+
 
 class FilterStage: public Stage
 {
     private:
-        float history[5];
+        float history[HISTORY_SIZE];
         int index;
 
     public:

@@ -6,7 +6,7 @@ FilterStage::FilterStage()
     int i;
     
     //length of history buffer is 5
-    for(i = 0; i < 5; i++)
+    for(i = 0; i < HISTORY_SIZE; i++)
     {
         history[i] = 0.0f;
     }
@@ -14,9 +14,24 @@ FilterStage::FilterStage()
 
 DataPacket FilterStage::process(const DataPacket& input)
 {
-    history[index] = input.getDistance();
-    index = (index + 1) % 5; //circular buffer logic
+    float sum = 0.0f;
+    float avg = 0.0f;
 
-    return input;
+    history[index] = input.getDistance();
+    index = (index + 1) % HISTORY_SIZE; //circular buffer logic
+
+    int i;
+    for(i = 0; i < HISTORY_SIZE; i++)
+    {
+        sum += history[i];
+    }
+
+    avg = sum / HISTORY_SIZE;
+
+    //create a copy to output a modded version of the original
+    DataPacket output = input;
+    output.setDistance(avg);
+
+    return output;
 
 };

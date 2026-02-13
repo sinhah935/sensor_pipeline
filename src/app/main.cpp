@@ -2,6 +2,32 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 
-extern "C" void app_main() {
-    ESP_LOGI("PIPELINE", "ESP32 pipeline is starting...");
+#include "drivers/sensor.h"
+#include "pipeline/FilterStage.hpp"
+#include "pipeline/LoggerStage.hpp"
+
+extern "C" int app_main() 
+{
+    init_sensor(); //initalize the sensor
+
+    //init the stage objects
+    FilterStage filter;
+    LoggerStage logger;
+
+    //for now keep as for loop, change to while(1) or freeRTOS later
+    int i;
+    for(i = 0; i < 20; i++)
+    {
+        sensor_data raw_data; //pointer to raw_data
+        read_sensor_data(&raw_data); //takes in sensor data
+
+        //create the wrapper for the data struct sensor_data
+        DataPacket packet(raw_data);
+
+        packet = filter.process(packet);
+        packet = logger.process(packet);
+
+    }
+    
+    return 0;
 }
