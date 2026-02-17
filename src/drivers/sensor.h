@@ -10,8 +10,8 @@ extern "C" {
 
 //should be 12 bytes of memory
 typedef struct {
-    float distance;
-    float time_stamp;
+    float distance; // in meters
+    float time_stamp; // time since boot in seconds
     int valid;
     
 } sensor_data;

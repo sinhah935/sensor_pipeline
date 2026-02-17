@@ -26,6 +26,10 @@ extern "C" int app_main()
 
         packet = filter.process(packet);
         packet = logger.process(packet);
+        
+        //Add a 60 ms delay
+        vTaskDelay(pdMS_TO_TICKS(60));
+
 
     }
     
