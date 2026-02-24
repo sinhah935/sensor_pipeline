@@ -15,8 +15,7 @@ extern "C" int app_main()
     LoggerStage logger;
 
     //for now keep as for loop, change to while(1) or freeRTOS later
-    int i;
-    for(i = 0; i < 20; i++)
+    while(1)
     {
         sensor_data raw_data; //pointer to raw_data
         read_sensor_data(&raw_data); //takes in sensor data
@@ -26,11 +25,9 @@ extern "C" int app_main()
 
         packet = filter.process(packet);
         packet = logger.process(packet);
-        
+
         //Add a 60 ms delay
         vTaskDelay(pdMS_TO_TICKS(60));
-
-
     }
     
     return 0;

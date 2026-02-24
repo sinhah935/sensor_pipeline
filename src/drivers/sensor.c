@@ -2,6 +2,7 @@
 #include <driver/gpio.h>
 #include "esp_timer.h"
 #include "esp_rom_sys.h"
+#include "esp_attr.h" //allows for IRAM_ATTR
 
 #define GPIO_TRIG 25
 #define GPIO_ECHO 26
@@ -9,9 +10,31 @@
 #define TIMEOUT 30000 //30 ms
 #define SOUND_SPEED 343 // meters/s
 
+//static uint8_t sensor_connected = 1; //flip bit. 1 for when sensor is connjected, 0 for not connected
+volatile int64_t start_us, finish_us, pulse_width_us;
+volatile bool measurement_ready = false; 
+
 /*
         REAL SENSOR VERSION BEGIN
 */
+
+//intializing the interrupt handler via the gpio library . The library takes care of the interrupt bit, so no need to clear it here
+static void IRAM_ATTR echo_handler(void *args)
+{
+    int64_t curr_time = esp_timer_get_time();
+    int level = gpio_get_level(GPIO_ECHO);
+
+    if(level == 1) //on rising edge, set start time to curr_time
+    {
+        start_us = curr_time;
+        finish_us = curr_time; //to prevent garbage value in finish_us
+    }
+    else //falling edge, compute the end time and then compute the pulse width
+    {
+        pulse_width_us = curr_time - start_us;
+        measurement_ready = true;
+    }
+};
 
 /*
     This function should:
@@ -28,7 +51,7 @@ void init_sensor()
     {
         .pin_bit_mask = (1ULL << GPIO_TRIG), //Select GPIO 25(for TRIG)
         .mode = GPIO_MODE_OUTPUT,
-        .intr_type = GPIO_INTR_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE, 
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE
     };
@@ -37,7 +60,7 @@ void init_sensor()
     {
         .pin_bit_mask = (1ULL << GPIO_ECHO),
         .mode = GPIO_MODE_INPUT,
-        .intr_type = GPIO_INTR_DISABLE,
+        .intr_type = GPIO_INTR_ANYEDGE, //allow rising and falling edge to trigger interrupt
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE
     };
@@ -47,6 +70,10 @@ void init_sensor()
     gpio_config(&io_conf_echo);
 
     gpio_set_level(GPIO_TRIG, 0); //for initialization, set TRIG to low pulse
+
+    //initialize the interrupt handler
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(GPIO_ECHO, echo_handler, NULL);
 };
 
 
@@ -59,7 +86,7 @@ void init_sensor()
 */
 esp_err_t read_sensor_data(sensor_data* data)
 {
-    int64_t start, finish, wait_start, wait_end, pulse_width_us;
+    //int64_t wait_start, wait_end;
     float distance_m; //in meters
 
     gpio_set_level(GPIO_TRIG,0);
@@ -68,48 +95,25 @@ esp_err_t read_sensor_data(sensor_data* data)
     esp_rom_delay_us(10); //busy-wait for 10 seconds, This will hopefully change to be asyncronous
     gpio_set_level(GPIO_TRIG,0);
 
-    //The time of when ECHO gets high back to low will first be done via polling
-    //Interrupt driven will be done after
-
-    //POLLING IMPLEMENTATION
-    wait_start = esp_timer_get_time(); //in us
-    while(gpio_get_level(GPIO_ECHO) == 0)
-    {
-        //if it takes longer than 30ms, throw an error
-        if(esp_timer_get_time() - wait_start > TIMEOUT)
-        {
-            data->valid = 0;
-            return ESP_FAIL;
-        }
-    }
-    start = esp_timer_get_time(); //Once the level is set to 1(high), start the timer
-
-    wait_end = esp_timer_get_time(); //in us
-    while(gpio_get_level(GPIO_ECHO) == 1)
-    {
-        //if it takes longer than 30ms, throw an error
-        if(esp_timer_get_time() - wait_end > TIMEOUT)
-        {
-            data->valid = 0;
-            return ESP_FAIL;
-        }
-    }
-    finish = esp_timer_get_time();
-    pulse_width_us = finish - start; //total time of the ultrasound, make sure pulse_width_us is positive
 
     //Convert time from microseconds to seconds, then multiply the time by velocity of sound and divide by 2
     //0.0001715 = 343 / 2 / 1e6
-    distance_m = pulse_width_us * 0.0001715f; //get distance in meters
 
-    //DEBUGGING PURPOSES
-    printf("Distance: %.3f m\n", distance_m);
+    //when ISR flicks the measurement to be true(ready), compute the distance and add the data to the sensor_data
+    if(measurement_ready)
+    {
+        measurement_ready = false;
+        distance_m = pulse_width_us * 0.0001715f; //get distance in meters
 
+        data->distance = distance_m;
+        data->time_stamp = (float)finish_us; //seconds
+        data->valid = 1;
 
-    data->distance = distance_m;
-    data->time_stamp = (float)finish; //seconds
-    data->valid = 1;
+        return ESP_OK;
+    }
+    
 
-    return ESP_OK;
+    return ESP_FAIL;
 }
 
 /*
